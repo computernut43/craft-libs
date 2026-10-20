@@ -1,0 +1,37 @@
+name: Go
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', '.github/workflows/go.yml']
+  pull_request:
+    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', '.github/workflows/go.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # fmt, vet, nopanic, staticcheck, test, wasm, licences, vuln (GOFLAGS=-mod=mod is set by the tool).
+      - run: go run -mod=mod ./tools/ci
+  test:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go run -mod=mod ./tools/ci test
