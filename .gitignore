@@ -5,3 +5,7 @@ plans/
 .DS_Store
 /.claude/
 .idea/
+/go.work
+/go.work.sum
+/docpath/testdata/rust-oracle/target/
+/docpath/testdata/rust-oracle/Cargo.lock
