@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/computernut43/craft-libs/devtools/gates"
 )
@@ -92,7 +93,9 @@ func moduleRoot() (string, error) {
 	}
 }
 
+// isModule reports whether go.mod's first line declares this module. Git on Windows checks files
+// out with CRLF line endings, so the line is compared without surrounding whitespace.
 func isModule(gomod []byte) bool {
-	const want = "module " + module + "\n"
-	return len(gomod) >= len(want) && string(gomod[:len(want)]) == want
+	first, _, _ := strings.Cut(string(gomod), "\n")
+	return strings.TrimSpace(first) == "module "+module
 }

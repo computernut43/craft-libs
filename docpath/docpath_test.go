@@ -336,6 +336,9 @@ func TestRefusalsHaveMessagesAndKinds(t *testing.T) {
 // Go only: a document path that isn't UTF-8 (possible on Unix) still resolves relative links
 // next to it, as Rust's non-UTF-8 Path does.
 func TestNonUTF8Document(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("document paths that aren't UTF-8 exist on Unix only")
+	}
 	doc := "/home/u/caf\xe9/a.doc"
 	if got := mustResolve(t, unix, "img/x.png", doc); got != "/home/u/caf\xe9/img/x.png" {
 		t.Errorf("got %q", got)
