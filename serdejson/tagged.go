@@ -144,3 +144,13 @@ func unitValue(d Decoder) error {
 	}
 	return d.Fail("invalid type, expected unit")
 }
+
+// TaggedUnit reads the rest of an internally tagged enum's unit variant (rest from
+// Decoder.Tagged) as serde does: a map may hold anything else (it is skipped), but a sequence
+// must hold nothing after the tag.
+func TaggedUnit(rest Decoder) error {
+	if rest.Peek() != KindArray {
+		return nil
+	}
+	return rest.Array(func(int) error { return rest.Fail("invalid length, expected unit variant") })
+}

@@ -41,6 +41,7 @@ struct Strict {
 enum Block {
     Para(ParaLike),
     Other { n: u32 },
+    Break,
 }
 
 #[derive(Serialize, Deserialize, Default)]

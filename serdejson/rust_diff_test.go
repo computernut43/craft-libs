@@ -42,6 +42,7 @@ type Strict struct {
 type Block struct {
 	Para  *ParaLike
 	Other *Other
+	Break bool
 }
 
 type Other struct {
@@ -49,11 +50,15 @@ type Other struct {
 }
 
 func (b *Block) DecodeSerde(d Decoder) error {
-	i, rest, err := d.Tagged("kind", []string{"para", "other"})
+	i, rest, err := d.Tagged("kind", []string{"para", "other", "break"})
 	if err != nil {
 		return err
 	}
 	*b = Block{}
+	if i == 2 {
+		b.Break = true
+		return TaggedUnit(rest)
+	}
 	if i == 0 {
 		b.Para = new(ParaLike)
 		return rest.Decode(b.Para)
@@ -64,6 +69,9 @@ func (b *Block) DecodeSerde(d Decoder) error {
 
 // MarshalJSON writes the tag first, then the variant's fields.
 func (b Block) MarshalJSON() ([]byte, error) {
+	if b.Break {
+		return []byte(`{"kind":"break"}`), nil
+	}
 	kind, fields := "other", any(b.Other)
 	if b.Para != nil {
 		kind, fields = "para", b.Para
@@ -618,8 +626,20 @@ func (g *gen) block(depth int) {
 		return
 	}
 	kind, fields := `"para"`, g.paraFields()
-	if g.chance(3) {
+	switch g.rng.IntN(6) {
+	case 0, 1:
 		kind, fields = `"other"`, []fieldGen{{"n", func(g *gen, _ int) { g.b.WriteString(g.number("u32")) }, false}}
+	case 2:
+		// A unit variant: a map may hold anything else, a sequence nothing.
+		kind = `"break"`
+		fields = []fieldGen{{"x", func(g *gen, _ int) { g.b.WriteString(g.pick("1", `"\ud800"`, "[]")) }, true}}
+		if !g.oops(2) {
+			if g.chance(8) {
+				g.b.WriteString(`["break"]`)
+				return
+			}
+			fields = nil
+		}
 	}
 	if g.oops(10) {
 		// From JSON the tag is a name only; an index or a unit-variant map isn't one.
@@ -789,7 +809,10 @@ func edgeInputs() [][]byte {
 		`["other"]`, `[0,7]`, `{"kind":1,"n":7}`, `{"kind":"other","n":7,"kind":"other"}`, `{"n":7,"kind":"other","x":"\ud800"}`,
 		`{"n":7,"kind":"other","x":"\u00e9"}`, `{"kind":"other","n":7.0}`, `{"kind":"other","n":-0}`, `{"kind":"other","n":4294967296}`,
 		`{"kind":"other"}`, `{"kind":"para","inner":[1.5,true]}`, `{"kind":"para","inner":{"m":{"1":1}}}`, `{"kind":"para","text":null}`,
-		`{"kind":"para","size":null}`, `{"kind":"para","inner":{"nested":[{"size":1e39}]}}`, `{"kind":{"para":null}}`, `{"kind":"\u0070ara"}`} {
+		`{"kind":"para","size":null}`, `{"kind":"para","inner":{"nested":[{"size":1e39}]}}`, `{"kind":{"para":null}}`, `{"kind":"\u0070ara"}`,
+		// A unit variant: anything else in a map, nothing else in a sequence.
+		`{"kind":"break"}`, `{"kind":"break","x":[1]}`, `{"x":"\u00e9","kind":"break"}`, `["break"]`, `["break",1]`, `["break",null]`,
+		`{"kind":"break","x":"\ud800"}`} {
 		out = append(out, []byte(head+`,"blocks":[`+b+`]}`))
 	}
 	return out
