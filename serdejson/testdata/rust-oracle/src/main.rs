@@ -24,6 +24,82 @@ struct Strict {
     #[serde(skip_serializing_if = "Option::is_none")]
     o: Option<Box<Inner>>,
     bytes: Vec<u8>,
+    #[serde(default)]
+    blocks: Vec<Block>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    under: Option<Under>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    spacing: Option<Spacing>,
+}
+
+/// An internally tagged enum, as WordCraft's Block: its fields are buffered (serde's Content)
+/// and decoded from there.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum Block {
+    Para(ParaLike),
+    Other { n: u32 },
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct ParaLike {
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color: Option<Color>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    under: Option<Under>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    spacing: Option<Spacing>,
+    list: Vec<f32>,
+    inner: Inner,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum Under {
+    None,
+    Single,
+    DotDash,
+}
+
+/// Adjacently tagged, as WordCraft's LineSpacing.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "rule", content = "value")]
+enum Spacing {
+    Multiple(f32),
+    AtLeast(f32),
+    Auto,
+}
+
+/// A hand-written Deserialize through serde_json::Value, as WordCraft's TextColor.
+#[derive(Serialize)]
+enum Color {
+    Auto,
+    Rgb([u8; 3]),
+}
+
+impl<'de> Deserialize<'de> for Color {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        #[derive(Deserialize)]
+        enum Written {
+            Auto,
+            Rgb([u8; 3]),
+        }
+        match serde_json::Value::deserialize(d)? {
+            serde_json::Value::String(s) if s.eq_ignore_ascii_case("auto") => Ok(Color::Auto),
+            serde_json::Value::String(_) => Err(D::Error::custom("bad colour")),
+            v => Ok(match serde_json::from_value(v).map_err(D::Error::custom)? {
+                Written::Auto => Color::Auto,
+                Written::Rgb(c) => Color::Rgb(c),
+            }),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]

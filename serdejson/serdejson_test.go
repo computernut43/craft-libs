@@ -3,6 +3,7 @@ package serdejson
 import (
 	"errors"
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -119,8 +120,8 @@ type color struct {
 	rgb  [3]uint8
 }
 
-func (c *color) DecodeSerde(d *Decoder) error {
-	if d.Peek() == '"' {
+func (c *color) DecodeSerde(d Decoder) error {
+	if d.Peek() == KindString {
 		s, err := d.String()
 		if err != nil {
 			return err
@@ -131,8 +132,8 @@ func (c *color) DecodeSerde(d *Decoder) error {
 		c.auto = true
 		return nil
 	}
-	return d.Object(func(key string) error {
-		if key != "Rgb" {
+	return d.Object(func(k Key) error {
+		if k.Name != "Rgb" {
 			return errors.New("unknown variant")
 		}
 		return d.Decode(&c.rgb)
@@ -158,7 +159,7 @@ func TestCustomDecoderAndRaw(t *testing.T) {
 
 type rawVal struct{ b []byte }
 
-func (r *rawVal) DecodeSerde(d *Decoder) error {
+func (r *rawVal) DecodeSerde(d Decoder) error {
 	b, err := d.Raw()
 	r.b = append([]byte(nil), b...)
 	return err
@@ -175,9 +176,13 @@ func TestHostileInputNeverPanics(t *testing.T) {
 func FuzzUnmarshal(f *testing.F) {
 	f.Add([]byte(`{"a":1,"b":"","c":null,"d":[],"e":[1,2,3],"f":0,"g":{},"h":{},"m":{"1":"x"},"bytes":[]}`))
 	f.Add([]byte(`[1,"",null,[],[1,2,3],0.5,[],{},{},true,null,[]]`))
+	f.Add([]byte(`{"a":1,"b":"","c":null,"d":[],"e":[1,2,3],"f":0,"g":{},"h":{},"m":{},"bytes":[],"blocks":[{"kind":"para","under":{"single":{}},` +
+		`"spacing":{"value":1.5,"rule":"atLeast"},"color":{"Rgb":[1,2,3]}},["other",1]],"color":"AUTO","spacing":["auto",null]}`))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		var v Strict
-		if Unmarshal(b, &v) != nil {
+		if Unmarshal(b, &v) != nil || hasNonFinite(reflect.ValueOf(v)) {
+			// An f32 read from Content is the f64 rounded, which can overflow to infinity; serde
+			// writes that as null, which doesn't read back (in Rust either).
 			return
 		}
 		// What decodes writes back, and that reads again the same.
@@ -194,4 +199,89 @@ func FuzzUnmarshal(f *testing.F) {
 			t.Fatalf("not stable:\n%s\n%s", out, again)
 		}
 	})
+}
+
+func hasNonFinite(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return math.IsInf(v.Float(), 0) || math.IsNaN(v.Float())
+	case reflect.Pointer:
+		return !v.IsNil() && hasNonFinite(v.Elem())
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if hasNonFinite(v.Field(i)) {
+				return true
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			if hasNonFinite(v.Index(i)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// TestContentRules pins how serde reads the same value from JSON text, from buffered Content
+// (inside an internally tagged block, or before an adjacently tagged enum's tag) and through a
+// serde_json::Value. Each outcome was checked against serde_json 1.0.151 (TestMatchesRust's edge
+// inputs).
+func TestContentRules(t *testing.T) {
+	const head = `{"a":1,"b":"","c":null,"d":[],"e":[1,2,3],"f":0,"g":{},"h":{},"m":{},"bytes":[]`
+	for _, c := range []struct {
+		field, val   string
+		json, inPara bool // read at the top level; read inside a paragraph block
+	}{
+		{"under", `"single"`, true, true},
+		{"under", `{"single":{}}`, false, true},
+		{"spacing", `{"rule":{"auto":{}}}`, false, true},
+		{"spacing", `[0,1.5]`, false, true},
+		{"spacing", `{"value":1e39,"rule":"multiple"}`, true, true},
+		{"spacing", `{"rule":"multiple","value":1e39}`, false, true},
+		{"spacing", `{"rule":"auto","x":"\ud800"}`, true, false},
+		{"spacing", `{"rule":"auto","value":{}}`, false, false},
+		{"spacing", `{"value":1,"rule":"multiple","value":2}`, false, false},
+		{"color", `"AuTo"`, true, true},
+		{"color", `{"Auto":{}}`, false, false},
+		{"color", `{"Rgb":[1,2,3],"Rgb":[4,5,6]}`, true, true},
+		{"color", `{"Rgb":[1,2,3],"Rgb":[1e400]}`, false, false},
+	} {
+		var v Strict
+		got := Unmarshal([]byte(head+`,"`+c.field+`":`+c.val+`}`), &v) == nil
+		if got != c.json {
+			t.Errorf("%s %s at the top level: read %v, want %v", c.field, c.val, got, c.json)
+		}
+		got = Unmarshal([]byte(head+`,"blocks":[{"kind":"para","`+c.field+`":`+c.val+`}]}`), &v) == nil
+		if got != c.inPara {
+			t.Errorf("%s %s in a block: read %v, want %v", c.field, c.val, got, c.inPara)
+		}
+	}
+	// A Value keeps a repeated key's last value. An f32 read from JSON text is parsed straight
+	// to f32, but one from Content is the f64 rounded: x is just above the midpoint between 1 and
+	// the next f32, so straight to f32 it rounds up, while as an f64 it is the midpoint, which
+	// then rounds to even (1).
+	const x = "1.0000000596046447753906250000001"
+	var v Strict
+	if err := Unmarshal([]byte(head+`,"color":{"Rgb":[1,2,3],"Rgb":[4,5,6]},"spacing":{"rule":"multiple","value":`+x+`},`+
+		`"blocks":[{"kind":"para","spacing":{"rule":"multiple","value":`+x+`}},{"n":7,"kind":"other"}]}`), &v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Color == nil || v.Color.Rgb != [3]uint8{4, 5, 6} {
+		t.Errorf("color = %+v", v.Color)
+	}
+	if len(v.Blocks) != 2 || v.Blocks[0].Para == nil || v.Blocks[0].Para.Spacing == nil || v.Blocks[1].Other == nil ||
+		v.Blocks[1].Other.N != 7 || v.Spacing == nil {
+		t.Fatalf("blocks = %+v, spacing = %+v", v.Blocks, v.Spacing)
+	}
+	if want := F32(math.Nextafter32(1, 2)); v.Spacing.Value != want {
+		t.Errorf("spacing value from JSON = %v, want %v", v.Spacing.Value, want)
+	}
+	if got := v.Blocks[0].Para.Spacing.Value; got != 1 {
+		t.Errorf("spacing value from Content = %v, want 1", got)
+	}
+	// Before the tag, the value is buffered as Content too.
+	if err := Unmarshal([]byte(head+`,"spacing":{"value":`+x+`,"rule":"multiple"}}`), &v); err != nil || v.Spacing.Value != 1 {
+		t.Errorf("spacing value before the tag = %+v (%v), want 1", v.Spacing, err)
+	}
 }
