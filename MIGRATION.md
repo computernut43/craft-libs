@@ -1,6 +1,6 @@
 # craft-libs: Rust → Go migration plan
 
-> **Status:** C0 done; C1 done (`docpath` verified, `atomic` ported); C2 (`pdf/write`) next · **Created:** 2026-10-20 · **Rust baseline:** `ae2f796` (computernut43/craft-libs `main`)
+> **Status:** C0 done; C1 done (`docpath` verified, `atomic` ported); `serdejson` added (verified); C2 (`pdf/write`) next · **Created:** 2026-10-20 · **Rust baseline:** `ae2f796` (computernut43/craft-libs `main`)
 >
 > Companion to [`computernut43/wordcraft` MIGRATION.md](https://github.com/computernut43/wordcraft/blob/main/MIGRATION.md),
 > which sets the rules this plan follows: port one small, tested component at a time; don't remove Rust until its Go
@@ -57,6 +57,7 @@ aicore/                      crates/ai-core
 atomic/                      crates/atomic
 cms/                         crates/cms
 docpath/                     crates/docpath
+serdejson/                   serde_json-compatible JSON for Go ports of Rust data models (new: no Rust crate here)
 i18n/                        crates/i18n
 pdf/
   write/                     craft-pdf `write` + the krilla subset WordCraft uses
@@ -76,7 +77,7 @@ development uses an uncommitted `go.work`.
 | Need (Rust) | Go | Notes |
 |---|---|---|
 | Static analysis for the never-crash rule | `golang.org/x/tools/go/analysis` v0.52.0 (BSD) | Used by `devtools/nopanic` |
-| serde/serde_json (`ai-core`, `settings`) | `encoding/json` | |
+| serde/serde_json (`ai-core`, `settings`, and the Craft apps' document models) | Own `serdejson` (decoder driven by Go types, as serde's derived Deserialize is) + `encoding/json` for encoding, rewritten in serde_json's format | `encoding/json` alone decodes differently (case-insensitive keys, duplicate fields taken, null accepted for any type, missing fields fine, base64 `[]byte`, its own recursion and number rules) and writes differently (HTML and U+2028 escapes, `12` for `12.0`, `null` for empty Vecs, numeric map keys in string order). `encoding/json/v2` is still a GOEXPERIMENT in Go 1.27 |
 | Plural rules (`intl_pluralrules`), language ids (`unic-langid`) | `golang.org/x/text/feature/plural`, `golang.org/x/text/language` | CLDR-based. Checked against the Rust tests when `i18n` is ported |
 | System locale (`sys-locale`) | Own: `LANG`/`LC_*` on Unix, `purego` → `GetUserDefaultLocaleName` on Windows, `NSLocale` via `purego/objc` on macOS, `navigator.languages` via `syscall/js` | |
 | Format-preserving TOML (`toml_edit`) | **No Go equivalent found.** `pelletier/go-toml/v2` v2.4.3 parses and encodes but doesn't keep comments | Spike when `settings` is ported: own minimal comment-preserving merge, or a `gap` the owner accepts |
@@ -99,6 +100,8 @@ Status: `not started` · `in progress` · `ported` · `verified` · `gap`.
 | Shared gates | per-crate workflows | `devtools/gates`, `tools/ci`, `.github/workflows/go.yml` | done (C0) |
 | Atomic save | `crates/atomic` | `atomic` | **ported**: all 33 Rust tests (31 runnable + the 2 `#[ignore]`d ACL tests) ported (umask children under 000/002/022/027/077); pass as root and as an unprivileged user, with POSIX ACLs; builds for Linux, macOS, Windows, FreeBSD, js/wasm. No differential run (file-system behaviour, not a pure function) |
 | Document paths | `crates/docpath` | `docpath` | **verified**: all 12 Rust tests ported (both platforms' colon rules on any OS); 60,000 generated cases identical to the Rust crate (`TestMatchesRust`, CI on Linux, Windows, macOS); fuzzed |
+| serde_json-compatible JSON | serde 1 + serde_json 1.0.151 (`float_roundtrip`), as the Craft apps build them | `serdejson` | **verified**: 100,000 generated inputs (valid documents with varied numbers and strings, single and double mistakes of every kind serde and encoding/json treat differently, exact recursion-limit depths, byte damage) read into test types mirroring Rust ones give the same value written back byte for byte, or both fail (`TestMatchesRust`, CI on Linux, Windows, macOS); all 18 deliberate bugs in the final check are caught; fuzzed. Serde's other read paths are covered the same way: internally tagged enums (`Decoder.Tagged`: the value buffered as serde's Content, then read with Content's rules), adjacently tagged (`AdjacentlyTagged`, content before the tag buffered), externally tagged (`ExternallyTagged`, `UnitVariant`), internally tagged unit variants (`TaggedUnit`: anything else in a map, nothing else in a sequence) and hand-written `Deserialize`s through `serde_json::Value` (`Decoder.Value`, `FromValue`). The test types carry one of each, nested in JSON and in Content, plus 145 fixed edge inputs whose outcome depends on the path (e.g. `{"single":{}}` is a unit only in Content; an f32 from Content is the f64 rounded); 100,145 inputs agree, and 9 of 11 planted bugs in these paths are caught (one was dead code, now removed; one is equivalent, as every caller stores the value in an f32). Built for WordCraft's document model (`.json` files and DOCX reading) |
+| Rust std number and text semantics | Rust std (`str::parse`, `{}`/`{:.N}`/`{:e}` formatting, f32/f64 min/max/clamp, float→int casts, Euclidean division, `char::to_lowercase`, `is_whitespace`, `trim`) | `rustcompat` | **verified**: 3.5 million inputs identical to Rust's std (`TestMatchesRust`; every code point for lowercase and whitespace), in CI on Linux, Windows and macOS. Found and matched: Rust's shortest `{}`/`{:e}` breaks exact ties away from zero (strconv rounds to even), and x86-64 `max`/`min` return the second argument for 0 vs -0. Built for GridCraft's and WordCraft's number display and parsing |
 | i18n | `crates/i18n` | `i18n` | not started |
 | Settings | `crates/settings` | `settings` | not started |
 | PDF write: configuration, guard, font limits | `crates/pdf/src/write.rs` | `pdf/write` | not started |
@@ -142,6 +145,9 @@ Ordered by what the Go WordCraft needs first (its milestones in brackets).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-20 | minor | `rustcompat`: Rust std number and text semantics, verified against Rust's std |
+| 2026-10-20 | minor | `serdejson`: internally, adjacently and externally tagged enums, `Value` and `FromValue`, verified against serde_json |
+| 2026-10-20 | minor | `serdejson`: serde_json-compatible decoding and encoding, verified against serde_json |
 | 2026-10-20 | minor | C1: `atomic` ported |
 | 2026-10-20 | minor | C1: `docpath` ported and verified against Rust |
 | 2026-10-20 | minor | C0 landed: Go module, `devtools/nopanic`, `devtools/gates`, `tools/ci`, Go workflow; `-mod=mod` while Rust `vendor/` exists |
