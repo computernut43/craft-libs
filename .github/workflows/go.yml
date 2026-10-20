@@ -16,8 +16,8 @@ jobs:
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       # fmt, vet, nopanic, staticcheck, test, wasm, licences, vuln (GOFLAGS=-mod=mod is set by the tool).
@@ -34,8 +34,8 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - run: go run -mod=mod ./tools/ci test
@@ -49,8 +49,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - uses: dtolnay/rust-toolchain@stable
@@ -60,3 +60,10 @@ jobs:
         env:
           CRAFT_DOCPATH_RUST: ${{ github.workspace }}/docpath/testdata/rust-oracle/target/release/docpath-diff${{ runner.os == 'Windows' && '.exe' || '' }}
         run: go test -mod=mod -count=1 -run TestMatchesRust -v ./docpath
+      - name: Build the serdejson reference
+        run: cargo build --release --manifest-path serdejson/testdata/rust-oracle/Cargo.toml
+      - name: Compare serdejson with serde_json
+        env:
+          CRAFT_SERDEJSON_RUST: ${{ github.workspace }}/serdejson/testdata/rust-oracle/target/release/serdejson-oracle${{ runner.os == 'Windows' && '.exe' || '' }}
+          CRAFT_SERDEJSON_CASES: "100000"
+        run: go test -mod=mod -count=1 -run TestMatchesRust -v ./serdejson

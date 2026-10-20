@@ -9,3 +9,5 @@ plans/
 /go.work.sum
 /docpath/testdata/rust-oracle/target/
 /docpath/testdata/rust-oracle/Cargo.lock
+/serdejson/testdata/rust-oracle/target/
+/serdejson/testdata/rust-oracle/Cargo.lock
