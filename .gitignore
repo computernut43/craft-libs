@@ -11,3 +11,5 @@ plans/
 /docpath/testdata/rust-oracle/Cargo.lock
 /serdejson/testdata/rust-oracle/target/
 /serdejson/testdata/rust-oracle/Cargo.lock
+/rustcompat/testdata/rust-oracle/target/
+/rustcompat/testdata/rust-oracle/Cargo.lock

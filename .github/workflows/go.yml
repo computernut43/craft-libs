@@ -67,3 +67,10 @@ jobs:
           CRAFT_SERDEJSON_RUST: ${{ github.workspace }}/serdejson/testdata/rust-oracle/target/release/serdejson-oracle${{ runner.os == 'Windows' && '.exe' || '' }}
           CRAFT_SERDEJSON_CASES: "100000"
         run: go test -mod=mod -count=1 -run TestMatchesRust -v ./serdejson
+      - name: Build the rustcompat reference
+        run: cargo build --release --manifest-path rustcompat/testdata/rust-oracle/Cargo.toml
+      - name: Compare rustcompat with Rust's std
+        env:
+          CRAFT_RUSTCOMPAT_RUST: ${{ github.workspace }}/rustcompat/testdata/rust-oracle/target/release/rustcompat-oracle${{ runner.os == 'Windows' && '.exe' || '' }}
+          CRAFT_RUSTCOMPAT_CASES: "100000"
+        run: go test -mod=mod -count=1 -run TestMatchesRust -v ./rustcompat
