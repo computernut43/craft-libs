@@ -24,6 +24,14 @@ The optional PDF writer bundles four CC0 ICC profiles by Clinton Ingram. See ATT
 
 Source provenance
 
+rustcompat/trig.go (Sin32, Cos32) is a Go port of Arm Optimized Routines' single-precision sine
+and cosine (math/sinf.c, math/cosf.c, math/sincosf.h, math/sincosf_data.c, commit on master
+fetched 2026-10-20).
+  https://github.com/ARM-software/optimized-routines
+  Copyright (c) 2018-2024, Arm Limited.
+  Licensed under MIT OR Apache-2.0 WITH LLVM-exception; the licence text is in
+  licenses/arm-optimized-routines/LICENSE.
+
 The SVG icon preparation in crates/ui is adapted from:
 - PhotoCraft, crates/ui-egui/src/icons.rs, revision e7a83ca342cdff568254f85f442b9cc8afb08066.
   https://github.com/storytold/photocraft
