@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', '.github/workflows/go.yml']
+    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', 'crates/docpath/**', '.github/workflows/go.yml']
   pull_request:
-    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', '.github/workflows/go.yml']
+    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', 'crates/docpath/**', '.github/workflows/go.yml']
 
 permissions:
   contents: read
@@ -35,3 +35,24 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go run -mod=mod ./tools/ci test
+
+  # Ports compared with the Rust crates they replace, on every OS (platform rules differ).
+  rust-diff:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the docpath reference
+        run: cargo build --release --manifest-path docpath/testdata/rust-oracle/Cargo.toml
+      - name: Compare docpath with Rust
+        env:
+          CRAFT_DOCPATH_RUST: ${{ github.workspace }}/docpath/testdata/rust-oracle/target/release/docpath-diff${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: go test -mod=mod -count=1 -run TestMatchesRust -v ./docpath
