@@ -1,6 +1,6 @@
 # craft-libs: Rust → Go migration plan
 
-> **Status:** C0 done; C1 in progress (`docpath` verified) · **Created:** 2026-10-20 · **Rust baseline:** `ae2f796` (computernut43/craft-libs `main`)
+> **Status:** C0 done; C1 done (`docpath` verified, `atomic` ported); C2 (`pdf/write`) next · **Created:** 2026-10-20 · **Rust baseline:** `ae2f796` (computernut43/craft-libs `main`)
 >
 > Companion to [`computernut43/wordcraft` MIGRATION.md](https://github.com/computernut43/wordcraft/blob/main/MIGRATION.md),
 > which sets the rules this plan follows: port one small, tested component at a time; don't remove Rust until its Go
@@ -97,7 +97,7 @@ Status: `not started` · `in progress` · `ported` · `verified` · `gap`.
 |---|---|---|---|
 | Shared never-crash analyzer | (clippy lints) | `devtools/nopanic` | done (C0): new, not a port; tests in `devtools/nopanic` |
 | Shared gates | per-crate workflows | `devtools/gates`, `tools/ci`, `.github/workflows/go.yml` | done (C0) |
-| Atomic save | `crates/atomic` | `atomic` | not started |
+| Atomic save | `crates/atomic` | `atomic` | **ported**: all 33 Rust tests (31 runnable + the 2 `#[ignore]`d ACL tests) ported (umask children under 000/002/022/027/077); pass as root and as an unprivileged user, with POSIX ACLs; builds for Linux, macOS, Windows, FreeBSD, js/wasm. No differential run (file-system behaviour, not a pure function) |
 | Document paths | `crates/docpath` | `docpath` | **verified**: all 12 Rust tests ported (both platforms' colon rules on any OS); 60,000 generated cases identical to the Rust crate (`TestMatchesRust`, CI on Linux, Windows, macOS); fuzzed |
 | i18n | `crates/i18n` | `i18n` | not started |
 | Settings | `crates/settings` | `settings` | not started |
@@ -142,6 +142,7 @@ Ordered by what the Go WordCraft needs first (its milestones in brackets).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-20 | minor | C1: `atomic` ported |
 | 2026-10-20 | minor | C1: `docpath` ported and verified against Rust |
 | 2026-10-20 | minor | C0 landed: Go module, `devtools/nopanic`, `devtools/gates`, `tools/ci`, Go workflow; `-mod=mod` while Rust `vendor/` exists |
 | 2026-10-20 | major | First version: audit, Go layout, library decisions, checklist, milestones |

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', 'crates/docpath/**', '.github/workflows/go.yml']
+    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', 'crates/docpath/**', 'crates/atomic/**', '.github/workflows/go.yml']
   pull_request:
-    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', 'crates/docpath/**', '.github/workflows/go.yml']
+    paths: ['**.go', 'go.mod', 'go.sum', '**/testdata/**', 'crates/docpath/**', 'crates/atomic/**', '.github/workflows/go.yml']
 
 permissions:
   contents: read
@@ -22,6 +22,10 @@ jobs:
           go-version-file: go.mod
       # fmt, vet, nopanic, staticcheck, test, wasm, licences, vuln (GOFLAGS=-mod=mod is set by the tool).
       - run: go run -mod=mod ./tools/ci
+      - name: Inherited ACLs (atomic)
+        run: |
+          sudo apt-get update && sudo apt-get install -y acl
+          CRAFT_ATOMIC_ACL=1 go test -mod=mod -count=1 -run ACL -v ./atomic
   test:
     timeout-minutes: 20
     strategy:
